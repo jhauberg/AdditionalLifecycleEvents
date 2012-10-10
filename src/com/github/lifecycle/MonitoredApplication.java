@@ -7,12 +7,25 @@ import android.app.Application;
 import android.app.ActivityManager.RunningTaskInfo;
 import android.content.ComponentName;
 import android.content.Context;
+import android.content.SharedPreferences;
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager.NameNotFoundException;
 
 public abstract class MonitoredApplication extends Application {
+	public final static int APPLICATION_STATE_UNKNOWN = -1;
+	
+	public final static int APPLICATION_STATE_NORMAL = 1;
+	public final static int APPLICATION_STATE_FIRST_RUN = 2;
+	public final static int APPLICATION_STATE_FIRST_RUN_AFTER_UPDATE = 3;
+	
+	private final static String PREFERENCES_VERSION_KEY = "version";
+	
 	private static MonitoredApplication instance;
 	
 	private static boolean applicationWasBroughtToBackground = false;
 	private static boolean applicationWasClosed = false;
+	
+	private int _applicationState = APPLICATION_STATE_UNKNOWN;
 	
 	public MonitoredApplication() {
 		instance = this;
@@ -20,6 +33,14 @@ public abstract class MonitoredApplication extends Application {
 
 	public static Context getInstance() {
 		return instance;
+	}
+	
+	@Override
+	public void onCreate() {
+		super.onCreate();
+
+		handleApplicationState(
+			determineApplicationState());
 	}
 
 	/**
@@ -30,6 +51,26 @@ public abstract class MonitoredApplication extends Application {
 		applicationWasBroughtToBackground = false;
 	}
 
+	/**
+	 * Occurs when the application detected that it was run for the first time.
+	 * 
+	 * This is determined by checking if the application version value was previously stored in Shared Preferences.   
+	 * If it is not present, then it is assumed that the application is being run for the first time.
+	 */
+	protected void onApplicationFirstRun() {
+		
+	}
+	
+	/**
+	 * Occurs when the application detected that it was run for the first time after being updated.
+	 * 
+	 * This is determined by checking whether the version value stored in Shared Preferences is 
+	 * less than the current application version.
+	 */
+	protected void onApplicationUpdated() {
+		
+	}
+	
 	/**
 	 * Occurs when an activity is paused, usually due to a press on the home button.
 	 */
@@ -42,6 +83,92 @@ public abstract class MonitoredApplication extends Application {
 	 */
 	public void onBroughtToForeground() {
 		applicationWasClosed = false;
+	}
+		
+	private final void handleApplicationState(final int state) {
+		switch (state) {
+			case APPLICATION_STATE_NORMAL:
+			default: 
+				break;
+				
+			case APPLICATION_STATE_FIRST_RUN_AFTER_UPDATE: {
+				onApplicationUpdated();
+			} break;
+			
+			case APPLICATION_STATE_FIRST_RUN: {
+				onApplicationFirstRun();
+			} break;
+		}
+	}
+	
+	private final int determineApplicationState() {
+		_applicationState = APPLICATION_STATE_UNKNOWN;
+		
+		boolean isFirstRun = false;
+		boolean isFirstRunAfterUpdate = false;
+		
+		boolean isNormalRun = false;
+		
+		final SharedPreferences preferences = getSharedPreferences(getPreferencesNamespace(), MODE_PRIVATE);
+		
+		if (preferences != null) {
+			final SharedPreferences.Editor editor = preferences.edit();
+			
+			final int applicationVersion = getApplicationVersionCode();
+			final int preferencesVersion = preferences.getInt(PREFERENCES_VERSION_KEY, 0);
+			
+			if (preferencesVersion != applicationVersion) {
+				if (preferencesVersion == 0) {
+					isFirstRun = true;
+				} else {
+					if (preferencesVersion < applicationVersion) {
+						isFirstRunAfterUpdate = true;
+					}
+				}
+				
+				editor.putInt(PREFERENCES_VERSION_KEY, applicationVersion);
+				editor.commit();
+			} else {
+				isNormalRun = true;
+			}
+		}
+		
+		if (isFirstRun) {
+			_applicationState = APPLICATION_STATE_FIRST_RUN;
+		} else if (isFirstRunAfterUpdate) {
+			_applicationState = APPLICATION_STATE_FIRST_RUN_AFTER_UPDATE;
+		} else if (isNormalRun) {
+			_applicationState = APPLICATION_STATE_NORMAL;
+		}
+		
+		return _applicationState;
+	}
+		
+	protected final int getApplicationVersionCode() {
+		int applicationVersionCode = 0;
+		
+		PackageInfo packageInfo = null;
+		
+		try {
+			packageInfo = getPackageManager().getPackageInfo(
+				getPackageName(), 0);
+		} catch (NameNotFoundException e) {
+			
+		}
+		
+		if (packageInfo != null) {
+			applicationVersionCode = packageInfo.versionCode;
+		}
+		
+		return applicationVersionCode;
+	}
+	
+	public final int getApplicationState() {
+		return _applicationState;
+	}
+	
+	public final String getPreferencesNamespace() {
+		return getPackageName() + ".preferences";
 	}
 	
 	/**

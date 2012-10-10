@@ -31,4 +31,22 @@ public final class Lifecycle extends MonitoredApplication {
 		 * (Note that onBroughtToBackground will not be called in this case)
 		 */
 	}
+	
+	@Override
+	protected void onApplicationFirstRun() {
+		/*
+		 * The application was started for the first time.
+		 * 
+		 * Setup defaults and track event for analytics.
+		 */
+	}
+	
+	@Override
+	protected void onApplicationUpdated() {
+		/*
+		 * The application was started with a higher Version Code than previously.
+		 * 
+		 * This is a good place to invalidate and re-register for the GCM service.
+		 */
+	}
 }
